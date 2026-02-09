@@ -250,6 +250,14 @@ public:
         // Nel tuo caso lascia così.
     }
 
+  std::vector<double> vec_drag;
+  std::vector<double> vec_lift;
+  std::vector<double> vec_drag_coeff;
+  std::vector<double> vec_lift_coeff;
+
+  std::vector<double> time_prec;
+  std::vector<double> time_solve;
+
 protected:
     const TrilinosWrappers::SparseMatrix *velocity_stiffness;
     TrilinosWrappers::PreconditionILU preconditioner_velocity;
@@ -281,19 +289,24 @@ protected:
 // Setup system.
 void setup();
 
-// Assemble system. We also assemble the pressure mass matrix (needed for the
-// preconditioner).
-void assemble();
+// Assemble system.
+// It is splitted into the assembly of the static matrices (mass, stiffness, pressure mass)
+// and the assembly of the time step dependent system matrix and right-hand side.
+// We also assemble the pressure mass matrix (needed for the preconditioner).
+void assemble_complete(const double &time);
+
+void assemble_time_step(const double &time);
 
 // Solve system.
 void solve();
 
-void run();
+// Solve the problem for one time step.
+void solve_time_step(double time);
 
 // Output results.
-void output(const unsigned int &time_step);
+void output(const unsigned int &time_step, const std::vector<double> &coefficients);
 
-void compute_lift_drag(const double &U_ref, const double &L_ref);
+std::vector<double> compute_lift_drag();
 
 protected:
 // MPI parallel. /////////////////////////////////////////////////////////////
@@ -315,8 +328,8 @@ const double Re = 100;
 // Kinematic viscosity [m2/s].
 const double nu = 0.1 / Re;
 
-// Outlet pressure [Pa].
-const double p_out = 10;
+// Density
+const double rho = 1.0; 
 
 // Temporal parameters.
 const double T;     // end time
@@ -330,9 +343,6 @@ ForcingTerm forcing_term;
 InletVelocity inlet_velocity;
 
 // Discretization. ///////////////////////////////////////////////////////////
-
-// Mesh file name.
-const std::string mesh_file_name;
 
 // Polynomial degree used for velocity.
 const unsigned int degree_velocity;
@@ -369,6 +379,13 @@ std::vector<IndexSet> block_relevant_dofs;
 
 // System matrix.
 TrilinosWrappers::BlockSparseMatrix system_matrix;
+
+// Stiffness Matrix
+TrilinosWrappers::BlockSparseMatrix stiffness_matrix;
+// Mass Matrix
+TrilinosWrappers::BlockSparseMatrix mass_matrix;
+// Convection matrix at step (u_k)
+TrilinosWrappers::BlockSparseMatrix convection_matrix;
 
 // Pressure mass matrix, needed for preconditioning. We use a block matrix for
 // convenience, but in practice we only look at the pressure-pressure block.
