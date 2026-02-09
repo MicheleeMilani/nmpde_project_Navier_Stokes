@@ -1,24 +1,28 @@
-#include "./NavierStokes.hpp"
+#include "NavierStokes.hpp"
 
 // Main function.
 int main(int argc, char *argv[])
 {
+
   Utilities::MPI::MPI_InitFinalize mpi_init(argc, argv);
   int rank;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+  // Mesh File
+  const std::string mesh_file_name = argc > 1 ? argv[1] : "../mesh/Cylinder2D.msh";
 
   // Using TAYLOR-HOOD ELEMENTS
   const unsigned int degree_velocity = 2;
   const unsigned int degree_pressure = 1;
 
   // Time variables
-  const double T = 2.0;
+  const double T = 8.0;
   const double deltat = 0.01;
 
   dealii::Timer timer;
   // Start the timer
   timer.restart();
-  NavierStokes problem(degree_velocity, degree_pressure, T, deltat);
+  NavierStokes problem(mesh_file_name, degree_velocity, degree_pressure, T, deltat);
 
   problem.setup();
   problem.solve();
@@ -28,7 +32,8 @@ int main(int argc, char *argv[])
 
   // Output the elapsed time
   if(rank == 0)
-    std::cout << "Time taken to solve Navier Stokes problem: " << timer.wall_time() << " seconds" << std::endl;
+    std::cout << "Time taken to solve ENTIRE Navier Stokes problem: " << timer.wall_time() << " seconds" << std::endl;
+
 
   if (rank == 0)
   {
