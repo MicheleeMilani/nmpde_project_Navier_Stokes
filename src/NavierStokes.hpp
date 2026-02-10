@@ -4,7 +4,6 @@
 #include "Preconditioners.hpp"
 #include "IncludesFile.hpp"
 
-
 using namespace dealii;
 
 // Class implementing a solver for the Stokes problem.
@@ -14,17 +13,16 @@ public:
   // Physical dimension (2D)
   static constexpr unsigned int dim = 2;
 
-
   NavierStokes( const std::string &mesh_file_name_,
                 const unsigned int &degree_velocity_,
                 const unsigned int &degree_pressure_,
                 const double &T_,
-                const double &deltat_)  // Default to test case 2 if not specified
+                const double &deltat_) 
                   : 
                   mpi_size(Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD)), 
                   mpi_rank(Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)), 
                   pcout(std::cout, mpi_rank == 0), 
-                  inlet_velocity(2),
+                  inlet_velocity(),
                   T(T_), 
                   mesh_file_name(mesh_file_name_), 
                   degree_velocity(degree_velocity_), 
@@ -39,26 +37,15 @@ public:
   {
   public:
 
-  InletVelocity(unsigned int test_case_ = 2)
-    : Function<dim>(dim + 1) , test_case(test_case_)
+  InletVelocity()
+    : Function<dim>(dim + 1)
   {
   }
     
     virtual void
     vector_value(const Point<dim> & p, Vector<double> &values) const override
     {
-      switch(this->test_case) {
-        case 1:
-          values[0] = 0.0;  
-          break;
-        case 2:
-          values[0] = 4.0 * u_m * p[1] * (H - p[1]) * std::sin(M_PI * get_time() / 8.0 ) / (H*H);
-          break;
-        case 3:
-        default:
-          values[0] = 4.0 * u_m * p[1] * (H - p[1])/ (H*H);
-          break;
-      }
+      values[0] = 4.0 * u_m * p[1] * (H - p[1])/ (H*H);
       
       for (unsigned int i = 1; i < dim + 1; ++i)
         values[i] = 0.0;
@@ -68,15 +55,7 @@ public:
     value(const Point<dim> &p, const unsigned int component = 0) const override
     {
       if (component == 0) {
-        switch(this->test_case) {
-          case 1:
-            return 0.0; 
-          case 2:
-            return 4.0 * u_m * p[1] * (H - p[1]) * std::sin(M_PI * get_time() / 8.0 ) / (H*H);
-          case 3:
-          default:
-            return 4.0 * u_m * p[1] * (H - p[1]) / (H*H);
-        }
+        return 4.0 * u_m * p[1] * (H - p[1]) / (H*H);
       }
       else
         return 0;
@@ -84,19 +63,10 @@ public:
     
     double getMeanVelocity() const
     {
-      switch(this->test_case) {
-        case 1:
-          return 0.0;  
-        case 3:
-          return 2.0 * u_m * std::sin(get_time()*M_PI/8.0) / 3.0;
-        case 2:
-        default:
-          return 2.0 * u_m / 3.0;
-      }
+      return 2.0 * u_m / 3.0;
     }
     
   protected:
-    int test_case;
     double H = 0.41;
     double u_m = 1.5;
   };
@@ -131,13 +101,12 @@ protected:
   void output(const unsigned int &time_step, std::vector<double>) const;
 
   //Compute drag and lift
-  std::vector<double> compute_forces();
+  std::vector<double> compute_lift_drag();
 
   void compute_pressure_difference();
 
   // MPI parallel. /////////////////////////////////////////////////////////////
   
-  unsigned int test_case;
   // Number of MPI processes.
   const unsigned int mpi_size;
 

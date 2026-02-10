@@ -3,158 +3,177 @@
 void NavierStokes::setup()
 {
   // Create the mesh.
-  {
-    pcout << "Initializing the mesh" << std::endl;
+  pcout << "Initializing the mesh" << std::endl;
 
-    Triangulation<dim> mesh_serial;
+  Triangulation<dim> mesh_serial;
 
-    GridIn<dim> grid_in;
-    grid_in.attach_triangulation(mesh_serial);
+  GridIn<dim> grid_in;
+  grid_in.attach_triangulation(mesh_serial);
 
-    std::ifstream grid_in_file(mesh_file_name);
-    grid_in.read_msh(grid_in_file);
+  std::ifstream grid_in_file(mesh_file_name);
+  grid_in.read_msh(grid_in_file);
 
-    GridTools::partition_triangulation(mpi_size, mesh_serial);
-    const auto construction_data = TriangulationDescription::Utilities::
-        create_description_from_triangulation(mesh_serial, MPI_COMM_WORLD);
-    mesh.create_triangulation(construction_data);
+  GridTools::partition_triangulation(mpi_size, mesh_serial);
+  const auto construction_data = TriangulationDescription::Utilities::
+      create_description_from_triangulation(mesh_serial, MPI_COMM_WORLD);
+  mesh.create_triangulation(construction_data);
 
-    pcout << "  Number of elements = " << mesh.n_global_active_cells()
-          << std::endl;
-  }
+  pcout << "  Number of elements = " << mesh.n_global_active_cells()
+        << std::endl;
+  
 
   pcout << "-----------------------------------------------" << std::endl;
 
   // Initialize the finite element space.
-  {
-    pcout << "Initializing the finite element space" << std::endl;
+  
+  pcout << "Initializing the finite element space" << std::endl;
 
-    const FE_SimplexP<dim> fe_scalar_velocity(degree_velocity);
-    const FE_SimplexP<dim> fe_scalar_pressure(degree_pressure);
-    fe = std::make_unique<FESystem<dim>>(fe_scalar_velocity,
-                                         dim,
-                                         fe_scalar_pressure,
-                                         1);
+  const FE_SimplexP<dim> fe_scalar_velocity(degree_velocity);
+  const FE_SimplexP<dim> fe_scalar_pressure(degree_pressure);
+  fe = std::make_unique<FESystem<dim>>(fe_scalar_velocity,
+                                        dim,
+                                        fe_scalar_pressure,
+                                        1);
 
-    pcout << "  Velocity degree:           = " << fe_scalar_velocity.degree
-          << std::endl;
-    pcout << "  Pressure degree:           = " << fe_scalar_pressure.degree
-          << std::endl;
-    pcout << "  DoFs per cell              = " << fe->dofs_per_cell
-          << std::endl;
+  pcout << "  Velocity degree:           = " << fe_scalar_velocity.degree
+        << std::endl;
+  pcout << "  Pressure degree:           = " << fe_scalar_pressure.degree
+        << std::endl;
+  pcout << "  DoFs per cell              = " << fe->dofs_per_cell
+        << std::endl;
 
-    quadrature = std::make_unique<QGaussSimplex<dim>>(fe->degree + 1);
+  quadrature = std::make_unique<QGaussSimplex<dim>>(fe->degree + 1);
 
-    pcout << "  Quadrature points per cell = " << quadrature->size()
-          << std::endl;
+  pcout << "  Quadrature points per cell = " << quadrature->size()
+        << std::endl;
 
-    quadrature_boundary = std::make_unique<QGaussSimplex<dim - 1>>(fe->degree + 1);
+  quadrature_boundary = std::make_unique<QGaussSimplex<dim - 1>>(fe->degree + 1);
 
-    pcout << "  Quadrature points per boundary cell = " << quadrature_boundary->size()
-          << std::endl;
-  }
+  pcout << "  Quadrature points per boundary cell = " << quadrature_boundary->size()
+        << std::endl;
+  
 
   pcout << "-----------------------------------------------" << std::endl;
 
   // Initialize the DoF handler.
+  
+  pcout << "Initializing the DoF handler" << std::endl;
+
+  dof_handler.reinit(mesh);
+  dof_handler.distribute_dofs(*fe);
+
+  // We want to reorder DoFs so that all velocity DoFs come first, and then
+  // all pressure DoFs.
+  std::vector<unsigned int> block_component(dim + 1, 0);
+  block_component[dim] = 1;
+  DoFRenumbering::component_wise(dof_handler, block_component);
+
+  locally_owned_dofs = dof_handler.locally_owned_dofs();
+  DoFTools::extract_locally_relevant_dofs(dof_handler, locally_relevant_dofs);
+
+  // Besides the locally owned and locally relevant indices for the whole
+  // system (velocity and pressure), we will also need those for the
+  // individual velocity and pressure blocks.
+  std::vector<types::global_dof_index> dofs_per_block =
+      DoFTools::count_dofs_per_fe_block(dof_handler, block_component);
+  const unsigned int n_u = dofs_per_block[0];
+  const unsigned int n_p = dofs_per_block[1];
+
+  block_owned_dofs.resize(2);
+  block_relevant_dofs.resize(2);
+  block_owned_dofs[0] = locally_owned_dofs.get_view(0, n_u);
+  block_owned_dofs[1] = locally_owned_dofs.get_view(n_u, n_u + n_p);
+  block_relevant_dofs[0] = locally_relevant_dofs.get_view(0, n_u);
+  block_relevant_dofs[1] = locally_relevant_dofs.get_view(n_u, n_u + n_p);
+
+  pcout << "  Number of DoFs: " << std::endl;
+  pcout << "    velocity = " << n_u << std::endl;
+  pcout << "    pressure = " << n_p << std::endl;
+  pcout << "    total    = " << n_u + n_p << std::endl;
+
+
+pcout << "-----------------------------------------------" << std::endl;
+
+// Initialize the linear system.
+{
+  pcout << "Initializing the linear system" << std::endl;
+
+  pcout << "  Initializing the sparsity pattern" << std::endl;
+
+  // Velocity DoFs interact with other velocity DoFs (the weak formulation has
+  // terms involving u times v), and pressure DoFs interact with velocity DoFs
+  // (there are terms involving p times v or u times q). However, pressure
+  // DoFs do not interact with other pressure DoFs (there are no terms
+  // involving p times q). We build a table to store this information, so that
+  // the sparsity pattern can be built accordingly.
+  Table<2, DoFTools::Coupling> coupling(dim + 1, dim + 1);
+  for (unsigned int c = 0; c < dim + 1; ++c)
   {
-    pcout << "Initializing the DoF handler" << std::endl;
-
-    dof_handler.reinit(mesh);
-    dof_handler.distribute_dofs(*fe);
-
-    // We want to reorder DoFs so that all velocity DoFs come first, and then
-    // all pressure DoFs.
-    std::vector<unsigned int> block_component(dim + 1, 0);
-    block_component[dim] = 1;
-    DoFRenumbering::component_wise(dof_handler, block_component);
-
-    locally_owned_dofs = dof_handler.locally_owned_dofs();
-    DoFTools::extract_locally_relevant_dofs(dof_handler, locally_relevant_dofs);
-
-    // Besides the locally owned and locally relevant indices for the whole
-    // system (velocity and pressure), we will also need those for the
-    // individual velocity and pressure blocks.
-    std::vector<types::global_dof_index> dofs_per_block =
-        DoFTools::count_dofs_per_fe_block(dof_handler, block_component);
-    const unsigned int n_u = dofs_per_block[0];
-    const unsigned int n_p = dofs_per_block[1];
-
-    block_owned_dofs.resize(2);
-    block_relevant_dofs.resize(2);
-    block_owned_dofs[0] = locally_owned_dofs.get_view(0, n_u);
-    block_owned_dofs[1] = locally_owned_dofs.get_view(n_u, n_u + n_p);
-    block_relevant_dofs[0] = locally_relevant_dofs.get_view(0, n_u);
-    block_relevant_dofs[1] = locally_relevant_dofs.get_view(n_u, n_u + n_p);
-
-    pcout << "  Number of DoFs: " << std::endl;
-    pcout << "    velocity = " << n_u << std::endl;
-    pcout << "    pressure = " << n_p << std::endl;
-    pcout << "    total    = " << n_u + n_p << std::endl;
+    for (unsigned int d = 0; d < dim + 1; ++d)
+    {
+      if (c == dim && d == dim) // pressure-pressure term
+        coupling[c][d] = DoFTools::none;
+      else // other combinations
+        coupling[c][d] = DoFTools::always;
+    }
   }
 
-  pcout << "-----------------------------------------------" << std::endl;
+  TrilinosWrappers::BlockSparsityPattern sparsity(block_owned_dofs,
+                                                  MPI_COMM_WORLD);
+  DoFTools::make_sparsity_pattern(dof_handler, coupling, sparsity);
+  sparsity.compress();
 
-  // Initialize the linear system.
+  // We also build a sparsity pattern for the pressure mass matrix.
+  for (unsigned int c = 0; c < dim + 1; ++c)
   {
-    pcout << "Initializing the linear system" << std::endl;
-
-    pcout << "  Initializing the sparsity pattern" << std::endl;
-
-    // Velocity DoFs interact with other velocity DoFs (the weak formulation has
-    // terms involving u times v), and pressure DoFs interact with velocity DoFs
-    // (there are terms involving p times v or u times q). However, pressure
-    // DoFs do not interact with other pressure DoFs (there are no terms
-    // involving p times q). We build a table to store this information, so that
-    // the sparsity pattern can be built accordingly.
-    Table<2, DoFTools::Coupling> coupling(dim + 1, dim + 1);
-    for (unsigned int c = 0; c < dim + 1; ++c)
+    for (unsigned int d = 0; d < dim + 1; ++d)
     {
-      for (unsigned int d = 0; d < dim + 1; ++d)
-      {
-        if (c == dim && d == dim) // pressure-pressure term
-          coupling[c][d] = DoFTools::none;
-        else // other combinations
-          coupling[c][d] = DoFTools::always;
-      }
+      if (c == dim && d == dim) // pressure-pressure term
+        coupling[c][d] = DoFTools::always;
+      else // other combinations
+        coupling[c][d] = DoFTools::none;
     }
-
-    TrilinosWrappers::BlockSparsityPattern sparsity(block_owned_dofs,
-                                                    MPI_COMM_WORLD);
-    DoFTools::make_sparsity_pattern(dof_handler, coupling, sparsity);
-    sparsity.compress();
-
-    // We also build a sparsity pattern for the pressure mass matrix.
-    for (unsigned int c = 0; c < dim + 1; ++c)
-    {
-      for (unsigned int d = 0; d < dim + 1; ++d)
-      {
-        if (c == dim && d == dim) // pressure-pressure term
-          coupling[c][d] = DoFTools::always;
-        else // other combinations
-          coupling[c][d] = DoFTools::none;
-      }
-    }
-    TrilinosWrappers::BlockSparsityPattern sparsity_pressure_mass(
-        block_owned_dofs, MPI_COMM_WORLD);
-    DoFTools::make_sparsity_pattern(dof_handler,
-                                    coupling,
-                                    sparsity_pressure_mass);
-    sparsity_pressure_mass.compress();
-
-    pcout << "  Initializing the matrices" << std::endl;
-    system_matrix.reinit(sparsity);
-    mass_matrix.reinit(sparsity);
-    convection_matrix.reinit(sparsity);
-    stiffness_matrix.reinit(sparsity);
-    pressure_mass.reinit(sparsity_pressure_mass);
-
-    pcout << "  Initializing the system right-hand side" << std::endl;
-    system_rhs.reinit(block_owned_dofs, MPI_COMM_WORLD);
-    pcout << "  Initializing the solution vector" << std::endl;
-    solution_owned.reinit(block_owned_dofs, MPI_COMM_WORLD);
-    solution.reinit(block_owned_dofs, block_relevant_dofs, MPI_COMM_WORLD);
   }
+  TrilinosWrappers::BlockSparsityPattern sparsity_pressure_mass(
+      block_owned_dofs, MPI_COMM_WORLD);
+  DoFTools::make_sparsity_pattern(dof_handler,
+                                  coupling,
+                                  sparsity_pressure_mass);
+  sparsity_pressure_mass.compress();
+
+  pcout << "  Initializing the matrices" << std::endl;
+  system_matrix.reinit(sparsity);
+  mass_matrix.reinit(sparsity);
+  convection_matrix.reinit(sparsity);
+  stiffness_matrix.reinit(sparsity);
+  pressure_mass.reinit(sparsity_pressure_mass);
+
+  pcout << "  Initializing the system right-hand side" << std::endl;
+  system_rhs.reinit(block_owned_dofs, MPI_COMM_WORLD);
+  pcout << "  Initializing the solution vector" << std::endl;
+  solution_owned.reinit(block_owned_dofs, MPI_COMM_WORLD);
+  solution.reinit(block_owned_dofs, block_relevant_dofs, MPI_COMM_WORLD);
+}
+
+  pcout << "===============================================================" << std::endl;
+  pcout << "               NAVIER-STOKES 2D SIMULATION                     " << std::endl;
+  pcout << "===============================================================" << std::endl;
+  pcout << "Model Parameters:" << std::endl;
+  pcout << "  T final:           " << T << std::endl;
+  pcout << "  Delta t:           " << deltat << std::endl;
+  pcout << "  Mesh file:         " << mesh_file_name << std::endl;
+  pcout << "---------------------------------------------------------------" << std::endl;
+  pcout << "Discretization:" << std::endl;
+  pcout << "  Velocity degree:   " << degree_velocity << std::endl;
+  pcout << "  Pressure degree:   " << degree_pressure << std::endl;
+  pcout << "  Active cells:      " << mesh.n_global_active_cells() << std::endl;
+  pcout << "---------------------------------------------------------------" << std::endl;
+  pcout << "Degrees of Freedom:" << std::endl;
+  pcout << "  Velocity:          " << n_u << std::endl;
+  pcout << "  Pressure:          " << n_p << std::endl;
+  pcout << "  TOTAL:             " << n_u + n_p << std::endl;
+  pcout << "===============================================================" << std::endl;
+  pcout << std::endl;
 }
 
 
@@ -164,9 +183,6 @@ void NavierStokes::setup()
 // mass matrix, the stiffness matrix, the pressure matrix
 void NavierStokes::assemble(const double &time)
 {
-  pcout << "===============================================" << std::endl;
-  pcout << "Assembling the system" << std::endl;
-
   const unsigned int dofs_per_cell = fe->dofs_per_cell;
   const unsigned int n_q = quadrature->size();
   const unsigned int n_q_boundary = quadrature_boundary->size();
@@ -361,9 +377,6 @@ void NavierStokes::assemble(const double &time)
 // assemble rhs and convection matrix
 void NavierStokes::assemble_time_step(const double &time)
 {
-  pcout << "===============================================" << std::endl;
-  pcout << "Assembling the system" << std::endl;
-
   const unsigned int dofs_per_cell = fe->dofs_per_cell;
   const unsigned int n_q = quadrature->size();
   const unsigned int n_q_boundary = quadrature_boundary->size();
@@ -530,7 +543,7 @@ void NavierStokes::assemble_time_step(const double &time)
 // Function used to solve the linear system and assemble the preconditioner
 void NavierStokes::solve_time_step(double time)
 {
-  pcout << "===============================================" << std::endl;
+  // pcout << "===============================================" << std::endl;
 
   const unsigned int maxiter = 100000;
   const double tol = 1e-4 /**system_rhs.l2_norm()*/;
@@ -554,12 +567,12 @@ void NavierStokes::solve_time_step(double time)
             PreconditionYosida yosida;
             yosida.initialize(system_matrix.block(0, 0), system_matrix.block(1, 0), system_matrix.block(0, 1), mass_matrix.block(0, 0), solution_owned);  // Yosida
             timerprec.stop();
-            pcout << "Time taken to initialize preconditioner: " << timerprec.wall_time() << " seconds" << std::endl;
+            // pcout << "Time taken to initialize preconditioner: " << timerprec.wall_time() << " seconds" << std::endl;
             time_prec.push_back(timerprec.wall_time());
             timersys.restart();
             solver.solve(system_matrix, solution_owned, system_rhs, yosida);
             timersys.stop();
-            pcout << "Time taken to solve Navier Stokes problem: " << timersys.wall_time() << " seconds" << std::endl;
+            // pcout << "Time taken to solve Navier Stokes problem: " << timersys.wall_time() << " seconds" << std::endl;
             time_solve.push_back(timersys.wall_time());
             break;
         }
@@ -570,12 +583,12 @@ void NavierStokes::solve_time_step(double time)
             PreconditionSIMPLE simple;
             simple.initialize(system_matrix.block(0, 0), system_matrix.block(1, 0), system_matrix.block(0, 1), solution_owned);
             timerprec.stop();
-            pcout << "Time taken to initialize preconditioner: " << timerprec.wall_time() << " seconds" << std::endl;
+            // pcout << "Time taken to initialize preconditioner: " << timerprec.wall_time() << " seconds" << std::endl;
             time_prec.push_back(timerprec.wall_time());
             timersys.restart();
             solver.solve(system_matrix, solution_owned, system_rhs, simple);
             timersys.stop();
-            pcout << "Time taken to solve Navier Stokes problem: " << timersys.wall_time() << " seconds" << std::endl;
+            // pcout << "Time taken to solve Navier Stokes problem: " << timersys.wall_time() << " seconds" << std::endl;
             time_solve.push_back(timersys.wall_time());
             
             break;
@@ -587,12 +600,12 @@ void NavierStokes::solve_time_step(double time)
             PreconditionaYosida ayosida;
             ayosida.initialize(system_matrix.block(0, 0), system_matrix.block(1, 0), system_matrix.block(0, 1), mass_matrix.block(0, 0), solution_owned);  // Yosida
             timerprec.stop();
-            pcout << "Time taken to initialize preconditioner: " << timerprec.wall_time() << " seconds" << std::endl;
+            // pcout << "Time taken to initialize preconditioner: " << timerprec.wall_time() << " seconds" << std::endl;
             time_prec.push_back(timerprec.wall_time());
             timersys.restart();
             solver.solve(system_matrix, solution_owned, system_rhs, ayosida);
             timersys.stop();
-            pcout << "Time taken to solve Navier Stokes problem: " << timersys.wall_time() << " seconds" << std::endl;
+            // pcout << "Time taken to solve Navier Stokes problem: " << timersys.wall_time() << " seconds" << std::endl;
             time_solve.push_back(timersys.wall_time());
             
             break;
@@ -604,12 +617,12 @@ void NavierStokes::solve_time_step(double time)
             PreconditionaSIMPLE asimple;
             asimple.initialize(system_matrix.block(0, 0), system_matrix.block(1, 0), system_matrix.block(0, 1), solution_owned);
             timerprec.stop();
-            pcout << "Time taken to initialize preconditioner: " << timerprec.wall_time() << " seconds" << std::endl;
+            // pcout << "Time taken to initialize preconditioner: " << timerprec.wall_time() << " seconds" << std::endl;
             time_prec.push_back(timerprec.wall_time());
             timersys.restart();
             solver.solve(system_matrix, solution_owned, system_rhs, asimple);
             timersys.stop();
-            pcout << "Time taken to solve Navier Stokes problem: " << timersys.wall_time() << " seconds" << std::endl;
+            // pcout << "Time taken to solve Navier Stokes problem: " << timersys.wall_time() << " seconds" << std::endl;
             time_solve.push_back(timersys.wall_time());
             
             break;
@@ -619,8 +632,8 @@ void NavierStokes::solve_time_step(double time)
             throw std::runtime_error("Invalid preconditioner type");
     }
   }
-  pcout << "Result:  " << solver_control.last_step() << " GMRES iterations"<< std::endl;
-  int Re = int(0.1 * 1.5 * std::sin(time*M_PI/8.0) / .001);
+  // pcout << "Result:  " << solver_control.last_step() << " GMRES iterations"<< std::endl;
+  int Re = 100;
       // Write coefficients to "coeff.csv"
     if (mpi_rank == 0) // Ensure only the root process writes to the file
     {
@@ -642,10 +655,7 @@ void NavierStokes::solve_time_step(double time)
 // Function used to save the output of the simulation
 void NavierStokes::output(const unsigned int &time_step, std::vector<double> coeff) const
 {
-    pcout << "===============================================" << std::endl;
-
     DataOut<dim> data_out;
-
     std::vector<DataComponentInterpretation::DataComponentInterpretation>
         data_component_interpretation(
             dim, DataComponentInterpretation::component_is_part_of_vector);
@@ -675,8 +685,6 @@ void NavierStokes::output(const unsigned int &time_step, std::vector<double> coe
                                         numbers::invalid_unsigned_int,
                                         1);
 
-    pcout << "Output written to " << output_file_name << std::endl;
-
     // Write coefficients to "coeff.csv"
     if (mpi_rank == 0) // Ensure only the root process writes to the file
     {
@@ -691,27 +699,30 @@ void NavierStokes::output(const unsigned int &time_step, std::vector<double> coe
             pcout << "Error: Unable to open coeff.csv for writing." << std::endl;
         }
     }
-
-    pcout << "===============================================" << std::endl;    
 }
 
 
 // Function used to update time step and call the solver, compute the forces and output the results
 void NavierStokes::solve()
 {
+  cout << "Starting time loop..." << std::endl;
   
-  pcout << "===============================================" << std::endl;
+  // Intestazione della tabella
+  pcout << std::string(85, '-') << std::endl;
+  pcout << "| " << std::setw(6) << "Step" 
+        << " | " << std::setw(10) << "Time" 
+        << " | " << std::setw(12) << "Cd (Drag)" 
+        << " | " << std::setw(12) << "Cl (Lift)" 
+        << " | " << std::setw(15) << "Status" << " |" << std::endl;
+  pcout << std::string(85, '-') << std::endl;
 
   // Apply the initial condition.
   {
-    pcout << "Applying the initial condition" << std::endl;
-
     VectorTools::interpolate(dof_handler, u_0, solution_owned);
     solution = solution_owned;
 
     // Output the initial solution.
     output(0, {0.0, 0.0});
-    pcout << "===============================================" << std::endl;
   }
   std::vector<double> coefficients;
   double c_D_max = -999;
@@ -725,10 +736,6 @@ void NavierStokes::solve()
     ++time_step;
     inlet_velocity.set_time(time);
 
-    pcout << "n = " << std::setw(3) << time_step << ", t = " << std::setw(5)
-          << time << ":" << std::flush;
-
-
     if( time == deltat ) assemble(time);
     else assemble_time_step(time);
 
@@ -736,24 +743,41 @@ void NavierStokes::solve()
     if( time == T - deltat )
         compute_pressure_difference();
     {
-      coefficients = compute_forces();
+      coefficients = compute_lift_drag();
       c_D_max = std::max(c_D_max, coefficients[0]);
       c_L_min = std::min(c_L_min, coefficients[1]);
     }
     // Since the starting solution t0 is zero we avoid the initial high forces values
-    if( time_step % 1 == 0) output(time_step, coefficients);
+    if (time_step % 10 == 0 || time_step == 1) 
+    {
+        std::string status = "";
+        if (time_step % 50 == 0) {
+             output(time_step, coefficients);
+             status = "VTU Saved";
+        }
+
+        pcout << "| " << std::setw(6) << time_step 
+              << " | " << std::setw(10) << std::fixed << std::setprecision(4) << time 
+              << " | " << std::setw(12) << std::scientific << std::setprecision(4) << coefficients[0] 
+              << " | " << std::setw(12) << coefficients[1] 
+              << " | " << std::setw(15) << status << " |" << std::endl;
+    }
   }
-  pcout << "===============================================" << std::endl;
-  pcout << "Drag Coefficient Max ----->   " << c_D_max << std::endl;
-  pcout << std::endl;
-  pcout << "Lift Coefficient Min ----->   " << c_L_min << std::endl;
-  pcout << "===============================================" << std::endl;
+
+    pcout << std::string(85, '-') << std::endl;
+    pcout << std::endl;
+    pcout << "===============================================================" << std::endl;
+    pcout << "FINAL RESULTS" << std::endl;
+    pcout << "===============================================================" << std::endl;
+    pcout << "  Max Drag Coefficient: " << std::fixed << std::setprecision(5) << c_D_max << std::endl;
+    pcout << "  Min Lift Coefficient: " << c_L_min << std::endl;
+    pcout << "===============================================================" << std::endl;
 }
 
-std::vector<double> NavierStokes::compute_forces()
+std::vector<double> NavierStokes::compute_lift_drag()
 {
-  pcout << "===============================================" << std::endl;
-  pcout << "Computing forces: " << std::endl;
+  // pcout << "===============================================" << std::endl;
+  // pcout << "Computing forces: " << std::endl;
 
    // Define quadrature for faces
    QGauss<dim - 1> face_quadrature_formula(3);
@@ -802,7 +826,7 @@ std::vector<double> NavierStokes::compute_forces()
            bool is_stress_boundary = false;
 
            // Determine if current face is where stress should be evaluated           
-           if (boundary_id == 3) // Obstacle 
+           if (boundary_id == 2) // Obstacle 
                is_stress_boundary = true;
 
            if (!is_stress_boundary)
@@ -827,8 +851,7 @@ std::vector<double> NavierStokes::compute_forces()
                    fluid_pressure[d][d] = pressure_values[q];
 
                // Compute fluid stress tensor (nu * grad(U) - pI)
-               fluid_stress = this->nu * velocity_gradients[q] - fluid_pressure;
-
+               fluid_stress = this->nu * (velocity_gradients[q] + transpose(velocity_gradients[q])) - fluid_pressure;
                // Compute forces: stress tensor contracted with normal vector and scaled by JxW
                forces = fluid_stress * normal_vector * fe_face_values.JxW(q);
 
@@ -853,9 +876,9 @@ std::vector<double> NavierStokes::compute_forces()
 	const double c_d=(2.*total_drag)/(mean_v*mean_v*D);
 	const double c_l=(2.*total_lift)/(mean_v*mean_v*D);
   std::vector<double> coefficients = { c_d , c_l };
-	pcout << "Coeff:\t " << c_d << " Coeff:\t " << c_l << std::endl;
+	// pcout << "Coeff:\t " << c_d << " Coeff:\t " << c_l << std::endl;
 
-  pcout << "===============================================" << std::endl;
+  // pcout << "===============================================" << std::endl;
   return coefficients;
 }
 

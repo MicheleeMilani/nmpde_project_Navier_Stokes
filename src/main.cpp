@@ -1,4 +1,6 @@
 #include "NavierStokes.hpp"
+#include <filesystem>
+namespace fs = std::filesystem;
 
 // Main function.
 int main(int argc, char *argv[])
@@ -8,6 +10,23 @@ int main(int argc, char *argv[])
   int rank;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
+  if (rank == 0)
+  {
+    const std::string output_dir = "../output"; 
+    try {
+      if (fs::exists(output_dir) && fs::is_directory(output_dir))
+      {
+        for (const auto& entry : fs::directory_iterator(output_dir))
+        {
+          fs::remove_all(entry.path());
+        }
+        std::cout << "Pulizia cartella '" << output_dir << "' completata." << std::endl;
+      }
+    } catch (const fs::filesystem_error& e) {
+      std::cerr << "Errore durante la pulizia della cartella: " << e.what() << std::endl;
+    }
+  }
+
   // Mesh File
   const std::string mesh_file_name = argc > 1 ? argv[1] : "../mesh/Cylinder2D.msh";
 
@@ -16,8 +35,8 @@ int main(int argc, char *argv[])
   const unsigned int degree_pressure = 1;
 
   // Time variables
-  const double T = 8.0;
-  const double deltat = 0.01;
+  const double T = 2.0;
+  const double deltat = 0.001;
 
   dealii::Timer timer;
   // Start the timer
@@ -32,12 +51,11 @@ int main(int argc, char *argv[])
 
   // Output the elapsed time
   if(rank == 0)
-    std::cout << "Time taken to solve ENTIRE Navier Stokes problem: " << timer.wall_time() << " seconds" << std::endl;
-
+    std::cout << "Time taken to solve Navier Stokes problem: " << timer.wall_time() << " seconds" << std::endl;
 
   if (rank == 0)
   {
-    const std::string output_filename = "forces_results_2D_2case.csv";
+    const std::string output_filename = "forces_results.csv";
     std::ofstream outputFile(output_filename);
 
     if (!outputFile.is_open())
