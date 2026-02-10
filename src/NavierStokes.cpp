@@ -702,7 +702,7 @@ void NavierStokes::output(const unsigned int &time_step, std::vector<double> coe
 // Function used to update time step and call the solver, compute the forces and output the results
 void NavierStokes::solve()
 {
-  cout << "Starting time loop..." << std::endl;
+  if (mpi_rank == 0) cout << "Starting time-stepping loop..." << std::endl;
   
   // Intestazione della tabella
   pcout << std::string(85, '-') << std::endl;
