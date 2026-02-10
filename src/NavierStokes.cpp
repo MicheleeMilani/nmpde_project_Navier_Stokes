@@ -176,9 +176,6 @@ pcout << "-----------------------------------------------" << std::endl;
   pcout << std::endl;
 }
 
-
-
-
 // Function used to assemble the static Matrixes, 
 // mass matrix, the stiffness matrix, the pressure matrix
 void NavierStokes::assemble(const double &time)
