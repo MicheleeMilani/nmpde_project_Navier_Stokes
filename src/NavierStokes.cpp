@@ -540,8 +540,6 @@ void NavierStokes::assemble_time_step(const double &time)
 // Function used to solve the linear system and assemble the preconditioner
 void NavierStokes::solve_time_step(double time)
 {
-  // pcout << "===============================================" << std::endl;
-
   const unsigned int maxiter = 100000;
   const double tol = 1e-4 /**system_rhs.l2_norm()*/;
   SolverControl solver_control(maxiter, tol, true);
@@ -564,12 +562,10 @@ void NavierStokes::solve_time_step(double time)
             PreconditionYosida yosida;
             yosida.initialize(system_matrix.block(0, 0), system_matrix.block(1, 0), system_matrix.block(0, 1), mass_matrix.block(0, 0), solution_owned);  // Yosida
             timerprec.stop();
-            // pcout << "Time taken to initialize preconditioner: " << timerprec.wall_time() << " seconds" << std::endl;
             time_prec.push_back(timerprec.wall_time());
             timersys.restart();
             solver.solve(system_matrix, solution_owned, system_rhs, yosida);
             timersys.stop();
-            // pcout << "Time taken to solve Navier Stokes problem: " << timersys.wall_time() << " seconds" << std::endl;
             time_solve.push_back(timersys.wall_time());
             break;
         }
@@ -580,12 +576,10 @@ void NavierStokes::solve_time_step(double time)
             PreconditionSIMPLE simple;
             simple.initialize(system_matrix.block(0, 0), system_matrix.block(1, 0), system_matrix.block(0, 1), solution_owned);
             timerprec.stop();
-            // pcout << "Time taken to initialize preconditioner: " << timerprec.wall_time() << " seconds" << std::endl;
             time_prec.push_back(timerprec.wall_time());
             timersys.restart();
             solver.solve(system_matrix, solution_owned, system_rhs, simple);
             timersys.stop();
-            // pcout << "Time taken to solve Navier Stokes problem: " << timersys.wall_time() << " seconds" << std::endl;
             time_solve.push_back(timersys.wall_time());
             
             break;
@@ -597,12 +591,10 @@ void NavierStokes::solve_time_step(double time)
             PreconditionaYosida ayosida;
             ayosida.initialize(system_matrix.block(0, 0), system_matrix.block(1, 0), system_matrix.block(0, 1), mass_matrix.block(0, 0), solution_owned);  // Yosida
             timerprec.stop();
-            // pcout << "Time taken to initialize preconditioner: " << timerprec.wall_time() << " seconds" << std::endl;
             time_prec.push_back(timerprec.wall_time());
             timersys.restart();
             solver.solve(system_matrix, solution_owned, system_rhs, ayosida);
             timersys.stop();
-            // pcout << "Time taken to solve Navier Stokes problem: " << timersys.wall_time() << " seconds" << std::endl;
             time_solve.push_back(timersys.wall_time());
             
             break;
@@ -614,12 +606,10 @@ void NavierStokes::solve_time_step(double time)
             PreconditionaSIMPLE asimple;
             asimple.initialize(system_matrix.block(0, 0), system_matrix.block(1, 0), system_matrix.block(0, 1), solution_owned);
             timerprec.stop();
-            // pcout << "Time taken to initialize preconditioner: " << timerprec.wall_time() << " seconds" << std::endl;
             time_prec.push_back(timerprec.wall_time());
             timersys.restart();
             solver.solve(system_matrix, solution_owned, system_rhs, asimple);
             timersys.stop();
-            // pcout << "Time taken to solve Navier Stokes problem: " << timersys.wall_time() << " seconds" << std::endl;
             time_solve.push_back(timersys.wall_time());
             
             break;
@@ -629,7 +619,6 @@ void NavierStokes::solve_time_step(double time)
             throw std::runtime_error("Invalid preconditioner type");
     }
   }
-  // pcout << "Result:  " << solver_control.last_step() << " GMRES iterations"<< std::endl;
   int Re = 100;
       // Write coefficients to "coeff.csv"
     if (mpi_rank == 0) // Ensure only the root process writes to the file
@@ -773,8 +762,6 @@ void NavierStokes::solve()
 
 std::vector<double> NavierStokes::compute_lift_drag()
 {
-  // pcout << "===============================================" << std::endl;
-  // pcout << "Computing forces: " << std::endl;
 
    // Define quadrature for faces
    QGauss<dim - 1> face_quadrature_formula(3);
@@ -868,14 +855,11 @@ std::vector<double> NavierStokes::compute_lift_drag()
    MPI_Reduce(&local_drag, &total_drag, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
   const double mean_v = inlet_velocity.getMeanVelocity();
 	const double D= 0.1;
-	
 
 	const double c_d=(2.*total_drag)/(mean_v*mean_v*D);
 	const double c_l=(2.*total_lift)/(mean_v*mean_v*D);
   std::vector<double> coefficients = { c_d , c_l };
-	// pcout << "Coeff:\t " << c_d << " Coeff:\t " << c_l << std::endl;
 
-  // pcout << "===============================================" << std::endl;
   return coefficients;
 }
 
