@@ -567,10 +567,13 @@ void NavierStokes::solve()
     else assemble_time_step(time);
 
     solve_time_step(time);
+
     if( time == T - deltat )
         compute_pressure_difference();
+    
+    coefficients = compute_lift_drag();
+    if ( time >= 0.5*T ) 
     {
-      coefficients = compute_lift_drag();
       c_D_max = std::max(c_D_max, coefficients[0]);
       c_L_min = std::min(c_L_min, coefficients[1]);
     }

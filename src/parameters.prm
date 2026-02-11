@@ -2,10 +2,10 @@
 
 subsection Physical properties
   set Reynolds number = 100
-  set Viscosity       = 0.001
+  set Viscosity       = 0.001           # 0.1/Re
   set Density         = 1.0
-  set T final         = 10.0
-  set Time step       = 0.001
+  set T final         = 3.0
+  set Time step       = 0.01
 end
 
 subsection Numerical parameters
