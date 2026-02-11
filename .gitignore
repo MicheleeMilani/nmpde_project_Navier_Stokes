@@ -36,3 +36,5 @@ output/
 *.out
 *.app
 
+.DS_Store
+

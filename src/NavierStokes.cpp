@@ -183,6 +183,8 @@ void NavierStokes::assemble(const double &time)
   const unsigned int dofs_per_cell = fe->dofs_per_cell;
   const unsigned int n_q = quadrature->size();
   const unsigned int n_q_boundary = quadrature_boundary->size();
+  const double freq = 1.0 / deltat;
+  const double invnu = 1.0 / nu;
 
   FEValues<dim> fe_values(*fe,
                           *quadrature,
@@ -261,13 +263,10 @@ void NavierStokes::assemble(const double &time)
           cell_stiffness_matrix(i, j) += nu * scalar_product(fe_values[velocity].gradient(i, q), fe_values[velocity].gradient(j, q)) * fe_values.JxW(q);
 
           // Time derivative discretization.
-          cell_mass_matrix(i, j) +=  scalar_product(fe_values[velocity].value(i, q), fe_values[velocity].value(j, q)) / deltat * fe_values.JxW(q);
+          cell_mass_matrix(i, j) +=  scalar_product(fe_values[velocity].value(i, q), fe_values[velocity].value(j, q)) * freq * fe_values.JxW(q);
 
           // Convective term 
           cell_convection_matrix(i, j) += scalar_product(fe_values[velocity].gradient(j, q) * current_velocity_values[q], fe_values[velocity].value(i, q)) * fe_values.JxW(q);
-          
-          // Temam Stabilization term
-          cell_convection_matrix(i, j) += 0.5 * current_velocity_divergence[q] * scalar_product(fe_values[velocity].value(i, q), fe_values[velocity].value(j, q)) * fe_values.JxW(q);             
           
           // Pressure term in the momentum equation.
           cell_matrix(i, j) -= fe_values[pressure].value(j, q) * fe_values[velocity].divergence(i, q) * fe_values.JxW(q);
@@ -276,12 +275,11 @@ void NavierStokes::assemble(const double &time)
           cell_matrix(i, j) += fe_values[pressure].value(i, q) * fe_values[velocity].divergence(j, q) * fe_values.JxW(q);
 
           // Pressure mass matrix.
-          cell_pressure_mass_matrix(i, j) += fe_values[pressure].value(i, q) * fe_values[pressure].value(j, q) / nu * fe_values.JxW(q);
+          cell_pressure_mass_matrix(i, j) += fe_values[pressure].value(i, q) * fe_values[pressure].value(j, q) * fe_values.JxW(q) * invnu;
 
         }
-
         // Time derivative discretization on the right hand side
-        cell_rhs(i) +=  scalar_product(current_velocity_values[q], fe_values[velocity].value(i, q)) * fe_values.JxW(q) / deltat;
+        cell_rhs(i) +=  scalar_product(current_velocity_values[q], fe_values[velocity].value(i, q)) * fe_values.JxW(q) * freq;
 
       }
     }
@@ -377,6 +375,7 @@ void NavierStokes::assemble_time_step(const double &time)
   const unsigned int dofs_per_cell = fe->dofs_per_cell;
   const unsigned int n_q = quadrature->size();
   const unsigned int n_q_boundary = quadrature_boundary->size();
+  const double freq = 1.0 / deltat;
 
   FEValues<dim> fe_values(*fe,
                           *quadrature,
@@ -413,7 +412,6 @@ void NavierStokes::assemble_time_step(const double &time)
   std::vector<double> current_velocity_divergence(n_q);
   // Store the previous velocity value in a tensor
   std::vector<double> prev_velocity_diverg(n_q);
-
   // Store the current velocity value in a tensor
   std::vector<Tensor<1, dim>> prev_velocity_values(n_q);
   //Store the prev velocity gradient value in a tensor
@@ -450,17 +448,11 @@ void NavierStokes::assemble_time_step(const double &time)
       {
         for (unsigned int j = 0; j < dofs_per_cell; ++j)
         {
-
           // Convective term 
           cell_convection_matrix(i, j) += scalar_product(fe_values[velocity].gradient(j, q) * current_velocity_values[q], fe_values[velocity].value(i, q)) * fe_values.JxW(q);
-          // Tamam Stabilization term 0.5 = rho / 2
-          cell_convection_matrix(i, j) += 0.5 * current_velocity_divergence[q] * scalar_product(fe_values[velocity].value(i, q), fe_values[velocity].value(j, q)) * fe_values.JxW(q);
-
         }
         // Time derivative discretization on the right hand side BDF2
-        cell_rhs(i) +=  scalar_product(current_velocity_values[q], fe_values[velocity].value(i, q)) * fe_values.JxW(q) / deltat;
-
-
+        cell_rhs(i) +=  scalar_product(current_velocity_values[q], fe_values[velocity].value(i, q)) * fe_values.JxW(q) * freq;
       }
     }
 
@@ -619,8 +611,7 @@ void NavierStokes::solve_time_step(double time)
             throw std::runtime_error("Invalid preconditioner type");
     }
   }
-  int Re = 100;
-      // Write coefficients to "coeff.csv"
+    // Write coefficients to "coeff.csv"
     if (mpi_rank == 0) // Ensure only the root process writes to the file
     {
         std::ofstream coeff_file("../output/gmres.csv", std::ios::app); // Open in append mode
@@ -764,7 +755,7 @@ std::vector<double> NavierStokes::compute_lift_drag()
 {
 
    // Define quadrature for faces
-   QGauss<dim - 1> face_quadrature_formula(3);
+   QGaussSimplex<dim - 1> face_quadrature_formula(3);
    const unsigned int n_q_points = face_quadrature_formula.size();
 
    // Define FE extractors for velocity and pressure

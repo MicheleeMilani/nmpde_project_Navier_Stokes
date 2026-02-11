@@ -123,7 +123,7 @@ protected:
   const double nu = 0.1 / Re;
 
   // Density
-  const double rho = 1.225;
+  const double rho = 1.00;
 
   // Forcing term.
   Functions::ZeroFunction<dim> forcing_term;

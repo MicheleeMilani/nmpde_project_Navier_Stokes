@@ -28,7 +28,7 @@ int main(int argc, char *argv[])
   }
 
   // Mesh File
-  const std::string mesh_file_name = argc > 1 ? argv[1] : "../mesh/turek_super_lite.msh";
+  const std::string mesh_file_name = argc > 1 ? argv[1] : "../mesh/Cylinder2D.msh";
 
   // Using TAYLOR-HOOD ELEMENTS
   const unsigned int degree_velocity = 2;
@@ -36,7 +36,7 @@ int main(int argc, char *argv[])
 
   // Time variables
   const double T = 2.0;
-  const double deltat = 0.001;
+  const double deltat = 0.01;
 
   dealii::Timer timer;
   // Start the timer
