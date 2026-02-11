@@ -4,6 +4,8 @@
 #include "Preconditioners.hpp"
 #include "IncludesFile.hpp"
 
+#include <deal.II/base/parameter_handler.h>
+
 using namespace dealii;
 
 // Class implementing a solver for the Stokes problem.
@@ -13,24 +15,37 @@ public:
   // Physical dimension (2D)
   static constexpr unsigned int dim = 2;
 
-  NavierStokes( const std::string &mesh_file_name_,
-                const unsigned int &degree_velocity_,
-                const unsigned int &degree_pressure_,
-                const double &T_,
-                const double &deltat_) 
+
+  NavierStokes() 
                   : 
                   mpi_size(Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD)), 
                   mpi_rank(Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)), 
                   pcout(std::cout, mpi_rank == 0), 
-                  inlet_velocity(),
-                  T(T_), 
-                  mesh_file_name(mesh_file_name_), 
-                  degree_velocity(degree_velocity_), 
-                  degree_pressure(degree_pressure_), 
-                  deltat(deltat_), 
+                  inlet_velocity(), 
                   mesh(MPI_COMM_WORLD)
                   
   {}
+
+    // Parse parameters from a file.
+  void parse_parameters(const std::string &parameter_file);
+
+  // Setup system.
+  void
+  setup();
+
+  // Solve system.
+  void
+  solve();
+
+
+  std::vector<double> vec_drag;
+  std::vector<double> vec_lift;
+  std::vector<double> vec_drag_coeff;
+  std::vector<double> vec_lift_coeff;
+
+  std::vector<double> time_prec;
+  std::vector<double> time_solve;
+
 
   // Function for inlet velocity based on 3 tests
   class InletVelocity : public Function<dim>
@@ -71,24 +86,11 @@ public:
     double u_m = 1.5;
   };
 
-
-  // Setup system.
-  void
-  setup();
-
-  // Solve system.
-  void
-  solve();
-
-  std::vector<double> vec_drag;
-  std::vector<double> vec_lift;
-  std::vector<double> vec_drag_coeff;
-  std::vector<double> vec_lift_coeff;
-
-  std::vector<double> time_prec;
-  std::vector<double> time_solve;
-
 protected:
+
+  // Declare parameters.
+  void declare_parameters(ParameterHandler &prm);
+
   // Assemble system the first time to create mass-stiffness matrixes 
   void assemble(const double &time);
   // Assemble at each time step to only compute the convection matrix that changes overtime
@@ -118,21 +120,23 @@ protected:
 
   // Problem definition. ///////////////////////////////////////////////////////
 
+  // Inlet velocity.
+  InletVelocity inlet_velocity;
+
+  // Reynolds number.
+  double Re;
+
   // Kinematic viscosity [m2/s].
-  const double Re = 100.0;
-  const double nu = 0.1 / Re;
+  double nu;
 
   // Density
-  const double rho = 1.00;
+  double rho;
 
   // Forcing term.
   Functions::ZeroFunction<dim> forcing_term;
  
-  // Inlet velocity.
-  InletVelocity inlet_velocity;
-
   // Final time.
-  const double T;
+  double T;
 
   double drag;
   double lift;
@@ -140,16 +144,16 @@ protected:
   // Discretization. ///////////////////////////////////////////////////////////
 
   // Mesh file name.
-  const std::string mesh_file_name;
+  std::string mesh_file_name;
 
   // Polynomial degree used for velocity.
-  const unsigned int degree_velocity;
+  unsigned int degree_velocity;
 
   // Polynomial degree used for pressure.
-  const unsigned int degree_pressure;
+  unsigned int degree_pressure;
 
   // TIme step.
-  const double deltat;
+  double deltat;
 
   // g(x).
   Functions::ZeroFunction<dim> function_g;

@@ -933,3 +933,62 @@ void NavierStokes::compute_pressure_difference()
 
 
 
+void NavierStokes::declare_parameters(ParameterHandler &prm)
+{
+  // Entra nella sottosezione "Physical properties"
+  prm.enter_subsection("Physical properties");
+  {
+    prm.declare_entry("Reynolds number", "100", Patterns::Double(0), "The Reynolds number");
+    prm.declare_entry("Viscosity", "0.001", Patterns::Double(0), "Kinematic viscosity");
+    prm.declare_entry("Density", "1.0", Patterns::Double(0), "Fluid density");
+    prm.declare_entry("T final", "10.0", Patterns::Double(0), "Final simulation time");
+    prm.declare_entry("Time step", "0.01", Patterns::Double(0), "Time step size");
+  }
+  prm.leave_subsection();
+
+  prm.enter_subsection("Numerical parameters");
+  {
+    prm.declare_entry("Velocity degree", "2", Patterns::Integer(1), "Polynomial degree for velocity");
+    prm.declare_entry("Pressure degree", "1", Patterns::Integer(1), "Polynomial degree for pressure");
+  }
+  prm.leave_subsection();
+
+  prm.enter_subsection("Mesh");
+  {
+    prm.declare_entry("Mesh file", "../mesh/turek_super_lite.msh", Patterns::FileName(), "Path to the mesh file");
+  }
+  prm.leave_subsection();
+}
+
+void NavierStokes::parse_parameters(const std::string &parameter_file)
+{
+  ParameterHandler prm;
+  declare_parameters(prm);
+  prm.parse_input(parameter_file);
+
+  prm.enter_subsection("Physical properties");
+  {
+    Re     = prm.get_double("Reynolds number");
+    nu     = prm.get_double("Viscosity");
+    rho    = prm.get_double("Density");
+    T      = prm.get_double("T final");
+    deltat = prm.get_double("Time step"); // Mappa "Time step" su deltat
+  }
+  prm.leave_subsection();
+
+  prm.enter_subsection("Numerical parameters");
+  {
+    degree_velocity = prm.get_integer("Velocity degree");
+    degree_pressure = prm.get_integer("Pressure degree");
+  }
+  prm.leave_subsection();
+
+  prm.enter_subsection("Mesh");
+  {
+    mesh_file_name = prm.get("Mesh file");
+  }
+  prm.leave_subsection();
+
+  prm.print_parameters(std::cout, ParameterHandler::Text);
+}
+
