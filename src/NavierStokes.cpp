@@ -529,6 +529,78 @@ void NavierStokes::assemble_time_step(const double &time)
 
 }
 
+// Function used to update time step and call the solver, compute the forces and output the results
+void NavierStokes::solve()
+{
+  if (mpi_rank == 0) cout << "Starting time-stepping loop..." << std::endl;
+  
+  // Intestazione della tabella
+  pcout << std::string(85, '-') << std::endl;
+  pcout << "| " << std::setw(6) << "Step" 
+        << " | " << std::setw(10) << "Time" 
+        << " | " << std::setw(12) << "Cd (Drag)" 
+        << " | " << std::setw(12) << "Cl (Lift)" 
+        << " | " << std::setw(15) << "Status" << " |" << std::endl;
+  pcout << std::string(85, '-') << std::endl;
+
+  // Apply the initial condition.
+  {
+    VectorTools::interpolate(dof_handler, u_0, solution_owned);
+    solution = solution_owned;
+
+    // Output the initial solution.
+    output(0, {0.0, 0.0});
+  }
+  std::vector<double> coefficients;
+  double c_D_max = -999;
+  double c_L_min = 999;
+  unsigned int time_step = 0;
+  double time = 0;
+  while (time < T - 0.5 * deltat)
+  { 
+
+    time += deltat;
+    ++time_step;
+    inlet_velocity.set_time(time);
+
+    if( time == deltat ) assemble(time);
+    else assemble_time_step(time);
+
+    solve_time_step(time);
+    if( time == T - deltat )
+        compute_pressure_difference();
+    {
+      coefficients = compute_lift_drag();
+      c_D_max = std::max(c_D_max, coefficients[0]);
+      c_L_min = std::min(c_L_min, coefficients[1]);
+    }
+    // Since the starting solution t0 is zero we avoid the initial high forces values
+    if (time_step % 10 == 0 || time_step == 1) 
+    {
+        std::string status = "";
+        if (time_step % 50 == 0) {
+             output(time_step, coefficients);
+             status = "VTU Saved";
+        }
+
+        pcout << "| " << std::setw(6) << time_step 
+              << " | " << std::setw(10) << std::fixed << std::setprecision(4) << time 
+              << " | " << std::setw(12) << std::scientific << std::setprecision(4) << coefficients[0] 
+              << " | " << std::setw(12) << coefficients[1] 
+              << " | " << std::setw(15) << status << " |" << std::endl;
+    }
+  }
+
+    pcout << std::string(85, '-') << std::endl;
+    pcout << std::endl;
+    pcout << "===============================================================" << std::endl;
+    pcout << "FINAL RESULTS" << std::endl;
+    pcout << "===============================================================" << std::endl;
+    pcout << "  Max Drag Coefficient: " << std::fixed << std::setprecision(5) << c_D_max << std::endl;
+    pcout << "  Min Lift Coefficient: " << c_L_min << std::endl;
+    pcout << "===============================================================" << std::endl;
+}
+
 // Function used to solve the linear system and assemble the preconditioner
 void NavierStokes::solve_time_step(double time)
 {
@@ -678,79 +750,6 @@ void NavierStokes::output(const unsigned int &time_step, std::vector<double> coe
     }
 }
 
-
-// Function used to update time step and call the solver, compute the forces and output the results
-void NavierStokes::solve()
-{
-  if (mpi_rank == 0) cout << "Starting time-stepping loop..." << std::endl;
-  
-  // Intestazione della tabella
-  pcout << std::string(85, '-') << std::endl;
-  pcout << "| " << std::setw(6) << "Step" 
-        << " | " << std::setw(10) << "Time" 
-        << " | " << std::setw(12) << "Cd (Drag)" 
-        << " | " << std::setw(12) << "Cl (Lift)" 
-        << " | " << std::setw(15) << "Status" << " |" << std::endl;
-  pcout << std::string(85, '-') << std::endl;
-
-  // Apply the initial condition.
-  {
-    VectorTools::interpolate(dof_handler, u_0, solution_owned);
-    solution = solution_owned;
-
-    // Output the initial solution.
-    output(0, {0.0, 0.0});
-  }
-  std::vector<double> coefficients;
-  double c_D_max = -999;
-  double c_L_min = 999;
-  unsigned int time_step = 0;
-  double time = 0;
-  while (time < T - 0.5 * deltat)
-  { 
-
-    time += deltat;
-    ++time_step;
-    inlet_velocity.set_time(time);
-
-    if( time == deltat ) assemble(time);
-    else assemble_time_step(time);
-
-    solve_time_step(time);
-    if( time == T - deltat )
-        compute_pressure_difference();
-    {
-      coefficients = compute_lift_drag();
-      c_D_max = std::max(c_D_max, coefficients[0]);
-      c_L_min = std::min(c_L_min, coefficients[1]);
-    }
-    // Since the starting solution t0 is zero we avoid the initial high forces values
-    if (time_step % 10 == 0 || time_step == 1) 
-    {
-        std::string status = "";
-        if (time_step % 50 == 0) {
-             output(time_step, coefficients);
-             status = "VTU Saved";
-        }
-
-        pcout << "| " << std::setw(6) << time_step 
-              << " | " << std::setw(10) << std::fixed << std::setprecision(4) << time 
-              << " | " << std::setw(12) << std::scientific << std::setprecision(4) << coefficients[0] 
-              << " | " << std::setw(12) << coefficients[1] 
-              << " | " << std::setw(15) << status << " |" << std::endl;
-    }
-  }
-
-    pcout << std::string(85, '-') << std::endl;
-    pcout << std::endl;
-    pcout << "===============================================================" << std::endl;
-    pcout << "FINAL RESULTS" << std::endl;
-    pcout << "===============================================================" << std::endl;
-    pcout << "  Max Drag Coefficient: " << std::fixed << std::setprecision(5) << c_D_max << std::endl;
-    pcout << "  Min Lift Coefficient: " << c_L_min << std::endl;
-    pcout << "===============================================================" << std::endl;
-}
-
 std::vector<double> NavierStokes::compute_lift_drag()
 {
 
@@ -801,7 +800,7 @@ std::vector<double> NavierStokes::compute_lift_drag()
            bool is_stress_boundary = false;
 
            // Determine if current face is where stress should be evaluated           
-           if (boundary_id == 2) // Obstacle 
+           if (boundary_id == 3) // Obstacle 
                is_stress_boundary = true;
 
            if (!is_stress_boundary)
@@ -988,7 +987,5 @@ void NavierStokes::parse_parameters(const std::string &parameter_file)
     mesh_file_name = prm.get("Mesh file");
   }
   prm.leave_subsection();
-
-  prm.print_parameters(std::cout, ParameterHandler::Text);
 }
 
