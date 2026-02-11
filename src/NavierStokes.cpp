@@ -158,7 +158,16 @@ pcout << "-----------------------------------------------" << std::endl;
   pcout << "===============================================================" << std::endl;
   pcout << "               NAVIER-STOKES 2D SIMULATION                     " << std::endl;
   pcout << "===============================================================" << std::endl;
-  pcout << "Model Parameters:" << std::endl;
+  pcout << "Physical Properties:" << std::endl;
+  pcout << "  Reynolds number:   " << Re << std::endl;
+  pcout << "  Viscosity (nu):    " << nu << std::endl;
+  pcout << "  Density (rho):     " << rho << std::endl;
+  pcout << "---------------------------------------------------------------" << std::endl;
+  pcout << "Inlet Condition:" << std::endl;
+  pcout << "  Test Case:         " << inlet_velocity.get_test_case() << std::endl; 
+  pcout << "  Mean Velocity:     " << inlet_velocity.getMeanVelocity() << " m/s" << std::endl;
+  pcout << "---------------------------------------------------------------" << std::endl;
+  pcout << "Simulation Parameters:" << std::endl;
   pcout << "  T final:           " << T << std::endl;
   pcout << "  Delta t:           " << deltat << std::endl;
   pcout << "  Mesh file:         " << mesh_file_name << std::endl;
@@ -937,9 +946,9 @@ void NavierStokes::compute_pressure_difference()
 
 void NavierStokes::declare_parameters(ParameterHandler &prm)
 {
-  // Entra nella sottosezione "Physical properties"
   prm.enter_subsection("Physical properties");
   {
+    prm.declare_entry("Test case", "1", Patterns::Integer(1, 3), "1: 2D-1 (Steady), 2: 2D-2 (Unsteady), 3: 2D-3 (Variable)");
     prm.declare_entry("Reynolds number", "100", Patterns::Double(0), "The Reynolds number");
     prm.declare_entry("Viscosity", "0.001", Patterns::Double(0), "Kinematic viscosity");
     prm.declare_entry("Density", "1.0", Patterns::Double(0), "Fluid density");
@@ -970,11 +979,15 @@ void NavierStokes::parse_parameters(const std::string &parameter_file)
 
   prm.enter_subsection("Physical properties");
   {
+    unsigned int test_case = prm.get_integer("Test case");
     Re     = prm.get_double("Reynolds number");
     nu     = prm.get_double("Viscosity");
     rho    = prm.get_double("Density");
     T      = prm.get_double("T final");
-    deltat = prm.get_double("Time step"); // Mappa "Time step" su deltat
+    deltat = prm.get_double("Time step");
+
+    double u_m_target = (test_case == 1) ? 0.3 : 1.5;
+    inlet_velocity.initialize(test_case, u_m_target);
   }
   prm.leave_subsection();
 

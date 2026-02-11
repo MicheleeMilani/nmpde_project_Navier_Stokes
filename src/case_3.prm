@@ -1,0 +1,19 @@
+# Configuration File - Case 2D-3 (Time-varying)
+
+subsection Physical properties
+  set Test case        = 3
+  set Reynolds number  = 100
+  set Viscosity        = 0.001
+  set Density          = 1.0
+  set T final          = 8.0       # Il periodo completo del seno richiesto (0 <= t <= 8)
+  set Time step        = 0.01
+end
+
+subsection Numerical parameters
+  set Velocity degree  = 2
+  set Pressure degree  = 1
+end
+
+subsection Mesh
+  set Mesh file        = ../mesh/turek_super_lite.msh
+end

@@ -1,0 +1,19 @@
+# Configuration File - Case 2D-1 (Steady)
+
+subsection Physical properties
+  set Test case        = 1
+  set Reynolds number  = 20
+  set Viscosity        = 0.001     # nu = Um * D / Re = 0.3 * 0.1 / 20 = 0.0015
+  set Density          = 1.0
+  set T final          = 10.0      # Tempo sufficiente per raggiungere la stazionarietà
+  set Time step        = 0.01
+end
+
+subsection Numerical parameters
+  set Velocity degree  = 2
+  set Pressure degree  = 1
+end
+
+subsection Mesh
+  set Mesh file        = ../mesh/turek_super_lite.msh
+end

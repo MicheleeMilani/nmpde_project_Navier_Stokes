@@ -1,0 +1,19 @@
+# Configuration File - Case 2D-2 (Unsteady)
+
+subsection Physical properties
+  set Test case        = 2
+  set Reynolds number  = 100
+  set Viscosity        = 0.001     # nu = 1.5 * 0.1 / 100 = 0.0015
+  set Density          = 1.0
+  set T final          = 5.0       # Per osservare i periodi del lift
+  set Time step        = 0.005     # Step più piccolo per catturare le oscillazioni
+end
+
+subsection Numerical parameters
+  set Velocity degree  = 2
+  set Pressure degree  = 1
+end
+
+subsection Mesh
+  set Mesh file        = ../mesh/turek_super_lite.msh
+end

@@ -64,18 +64,15 @@ public:
   // Physical dimension (2D)
   static constexpr unsigned int dim = 2;
 
-
-  NavierStokes() 
-                  : 
+  NavierStokes() : 
                   mpi_size(Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD)), 
                   mpi_rank(Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)), 
                   pcout(std::cout, mpi_rank == 0), 
                   inlet_velocity(), 
-                  mesh(MPI_COMM_WORLD)
-                  
+                  mesh(MPI_COMM_WORLD)        
   {}
 
-    // Parse parameters from a file.
+  // Parse parameters from a file.
   void parse_parameters(const std::string &parameter_file);
 
   // Setup system.
@@ -85,7 +82,6 @@ public:
   // Solve system.
   void
   solve();
-
 
   std::vector<double> vec_drag;
   std::vector<double> vec_lift;
@@ -100,40 +96,43 @@ public:
   class InletVelocity : public Function<dim>
   {
   public:
+    InletVelocity() : Function<dim>(dim + 1), u_m(0.3), test_case(1) {} // deafult values
 
-  InletVelocity()
-    : Function<dim>(dim + 1)
-  {
-  }
-    
-    virtual void
-    vector_value(const Point<dim> & p, Vector<double> &values) const override
-    {
-      values[0] = 4.0 * u_m * p[1] * (H - p[1])/ (H*H);
-      
+    void initialize(unsigned int test_id, double u_m_val) {
+      test_case = test_id;
+      u_m = u_m_val;
+    }
+
+    // Questo risolve l'errore alla riga 849
+    double getMeanVelocity() const {
+      return 2.0 * u_m / 3.0;
+    }
+
+    virtual void vector_value(const Point<dim> &p, Vector<double> &values) const override {
+      double factor = 1.0;
+      if (test_case == 3) {
+        factor = std::sin(M_PI * this->get_time() / 8.0);
+      }
+      values[0] = 4.0 * u_m * p[1] * (H - p[1]) / (H * H) * factor;
       for (unsigned int i = 1; i < dim + 1; ++i)
         values[i] = 0.0;
     }
-    
-    virtual double
-    value(const Point<dim> &p, const unsigned int component = 0) const override
-    {
+
+    virtual double value(const Point<dim> &p, const unsigned int component = 0) const override {
       if (component == 0) {
-        return 4.0 * u_m * p[1] * (H - p[1]) / (H*H);
+        double factor = (test_case == 3) ? std::sin(M_PI * this->get_time() / 8.0) : 1.0;
+        return 4.0 * u_m * p[1] * (H - p[1]) / (H * H) * factor;
       }
-      else
-        return 0;
+      return 0.0;
     }
-    
-    double getMeanVelocity() const
-    {
-      return 2.0 * u_m / 3.0;
-    }
-    
+
+    unsigned int get_test_case() const { return test_case; }
+
   protected:
     double H = 0.41;
-    double u_m = 1.5;
-  };
+    double u_m;
+    unsigned int test_case;
+};
 
 protected:
 
