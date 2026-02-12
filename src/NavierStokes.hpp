@@ -202,6 +202,7 @@ protected:
 
   // TIme step.
   double deltat;
+  unsigned int save_frequency;
 
   // g(x).
   Functions::ZeroFunction<dim> function_g;

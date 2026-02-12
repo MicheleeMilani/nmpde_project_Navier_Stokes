@@ -17,3 +17,7 @@ end
 subsection Mesh
   set Mesh file        = ../mesh/turek_super_lite.msh
 end
+
+subsection Output parameters
+  set Saving frequency = 50
+end

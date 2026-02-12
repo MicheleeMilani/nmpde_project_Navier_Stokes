@@ -590,7 +590,7 @@ void NavierStokes::solve()
     if (time_step % 10 == 0 || time_step == 1) 
     {
         std::string status = "";
-        if (time_step % 50 == 0) {
+        if (time_step % save_frequency == 0) {
              output(time_step, coefficients);
              status = "VTU Saved";
         }
@@ -969,6 +969,12 @@ void NavierStokes::declare_parameters(ParameterHandler &prm)
     prm.declare_entry("Mesh file", "../mesh/turek_super_lite.msh", Patterns::FileName(), "Path to the mesh file");
   }
   prm.leave_subsection();
+
+  prm.enter_subsection("Output parameters"); 
+  {
+    prm.declare_entry("Saving frequency", "50", Patterns::Integer(), "Frequency of data saving");
+  }
+  prm.leave_subsection();
 }
 
 void NavierStokes::parse_parameters(const std::string &parameter_file)
@@ -1001,6 +1007,12 @@ void NavierStokes::parse_parameters(const std::string &parameter_file)
   prm.enter_subsection("Mesh");
   {
     mesh_file_name = prm.get("Mesh file");
+  }
+  prm.leave_subsection();
+
+  prm.enter_subsection("Output parameters");
+  {
+    save_frequency = prm.get_integer("Saving frequency");
   }
   prm.leave_subsection();
 }
