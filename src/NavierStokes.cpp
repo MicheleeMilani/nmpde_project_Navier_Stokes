@@ -171,6 +171,18 @@ pcout << "-----------------------------------------------" << std::endl;
   pcout << "  T final:           " << T << std::endl;
   pcout << "  Delta t:           " << deltat << std::endl;
   pcout << "  Mesh file:         " << mesh_file_name << std::endl;
+  switch (preconditioner_type)
+  {
+    case 0:
+      pcout << "  Preconditioner:    Yosida" << std::endl;
+      break;
+    case 1:
+      pcout << "  Preconditioner:    SIMPLE" << std::endl;
+      break;
+    default:
+      pcout << "  Preconditioner:    Unknown" << std::endl;
+      break;
+  }
   pcout << "---------------------------------------------------------------" << std::endl;
   pcout << "Discretization:" << std::endl;
   pcout << "  Velocity degree:   " << degree_velocity << std::endl;
@@ -616,7 +628,7 @@ void NavierStokes::solve()
 // Function used to solve the linear system and assemble the preconditioner
 void NavierStokes::solve_time_step(double time)
 {
-  const unsigned int maxiter = 100000;
+  const unsigned int maxiter = 10000;
   const double tol = 1e-4 /**system_rhs.l2_norm()*/;
   SolverControl solver_control(maxiter, tol, true);
   // solver_control.enable_history_data();
@@ -629,7 +641,6 @@ void NavierStokes::solve_time_step(double time)
     timerprec.restart();
     dealii::Timer timersys;
     
-    unsigned int preconditioner_type = 3;
     switch (preconditioner_type)
     {
         // Yosida
@@ -656,41 +667,10 @@ void NavierStokes::solve_time_step(double time)
             timersys.restart();
             solver.solve(system_matrix, solution_owned, system_rhs, simple);
             timersys.stop();
-            time_solve.push_back(timersys.wall_time());
-            
+            time_solve.push_back(timersys.wall_time());  
             break;
         }
-    
-        // aYosida
-        case 2:
-        {
-            PreconditionaYosida ayosida;
-            ayosida.initialize(system_matrix.block(0, 0), system_matrix.block(1, 0), system_matrix.block(0, 1), mass_matrix.block(0, 0), solution_owned);  // Yosida
-            timerprec.stop();
-            time_prec.push_back(timerprec.wall_time());
-            timersys.restart();
-            solver.solve(system_matrix, solution_owned, system_rhs, ayosida);
-            timersys.stop();
-            time_solve.push_back(timersys.wall_time());
             
-            break;
-        }
-    
-        // aSIMPLE
-        case 3:
-        {
-            PreconditionaSIMPLE asimple;
-            asimple.initialize(system_matrix.block(0, 0), system_matrix.block(1, 0), system_matrix.block(0, 1), solution_owned);
-            timerprec.stop();
-            time_prec.push_back(timerprec.wall_time());
-            timersys.restart();
-            solver.solve(system_matrix, solution_owned, system_rhs, asimple);
-            timersys.stop();
-            time_solve.push_back(timersys.wall_time());
-            
-            break;
-        }
-    
         default:
             throw std::runtime_error("Invalid preconditioner type");
     }
@@ -961,6 +941,7 @@ void NavierStokes::declare_parameters(ParameterHandler &prm)
   {
     prm.declare_entry("Velocity degree", "2", Patterns::Integer(1), "Polynomial degree for velocity");
     prm.declare_entry("Pressure degree", "1", Patterns::Integer(1), "Polynomial degree for pressure");
+    prm.declare_entry("Preconditioner Type", "0", Patterns::Integer(0, 1), "0: Yosida, 1: SIMPLE");
   }
   prm.leave_subsection();
 
@@ -1001,6 +982,7 @@ void NavierStokes::parse_parameters(const std::string &parameter_file)
   {
     degree_velocity = prm.get_integer("Velocity degree");
     degree_pressure = prm.get_integer("Pressure degree");
+    preconditioner_type = prm.get_integer("Preconditioner Type");
   }
   prm.leave_subsection();
 

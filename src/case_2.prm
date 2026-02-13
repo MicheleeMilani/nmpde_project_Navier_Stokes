@@ -5,13 +5,14 @@ subsection Physical properties
   set Reynolds number  = 100
   set Viscosity        = 0.001     # nu = 1.5 * 0.1 / 100 = 0.0015
   set Density          = 1.0
-  set T final          = 5.0       # Per osservare i periodi del lift
+  set T final          = 0.5       # Per osservare i periodi del lift
   set Time step        = 0.005     # Step più piccolo per catturare le oscillazioni
 end
 
 subsection Numerical parameters
   set Velocity degree  = 2
   set Pressure degree  = 1
+  set Preconditioner Type = 1
 end
 
 subsection Mesh

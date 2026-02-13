@@ -10,7 +10,7 @@ int main(int argc, char *argv[])
   int rank;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-  std::string param_file = argc > 1 ? argv[1] : "../src/case_1.prm";
+  std::string param_file = argc > 1 ? argv[1] : "../src/case_2.prm";
 
   if (rank == 0)
   {

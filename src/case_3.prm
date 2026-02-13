@@ -12,6 +12,7 @@ end
 subsection Numerical parameters
   set Velocity degree  = 2
   set Pressure degree  = 1
+  set Preconditioner Type = 1
 end
 
 subsection Mesh

@@ -189,6 +189,8 @@ protected:
   double drag;
   double lift;
 
+  unsigned int preconditioner_type = 2;
+
   // Discretization. ///////////////////////////////////////////////////////////
 
   // Mesh file name.
