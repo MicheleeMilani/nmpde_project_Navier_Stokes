@@ -1,5 +1,6 @@
 #include "NavierStokes.hpp"
-
+#include <filesystem>
+namespace fs = std::filesystem;
 
 // Main function.
 int main(int argc, char *argv[])
@@ -10,6 +11,23 @@ int main(int argc, char *argv[])
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
   std::string param_file = argc > 1 ? argv[1] : "../src/case_1.prm";
+
+  if (rank == 0)
+  {
+    const std::string output_dir = "../output"; 
+    try {
+      if (fs::exists(output_dir) && fs::is_directory(output_dir))
+      {
+        for (const auto& entry : fs::directory_iterator(output_dir))
+        {
+          fs::remove_all(entry.path());
+        }
+        std::cout << "Pulizia cartella '" << output_dir << "' completata." << std::endl;
+      }
+    } catch (const fs::filesystem_error& e) {
+      std::cerr << "Errore durante la pulizia della cartella: " << e.what() << std::endl;
+    }
+  }
 
   dealii::Timer timer;
   // Start the timer
