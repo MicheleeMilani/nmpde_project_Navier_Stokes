@@ -108,19 +108,16 @@ public:
     }
 
     virtual void vector_value(const Point<dim> &p, Vector<double> &values) const override {
-      double factor = 1.0;
-      if (test_case == 3) {
-        factor = std::sin(M_PI * this->get_time() / 8.0);
-      }
-      values[0] = 4.0 * u_m * p[1] * (H - p[1]) / (H * H) * factor;
-      for (unsigned int i = 1; i < dim + 1; ++i)
-        values[i] = 0.0;
+      values = 0.0;
+      double factor = (test_case == 3) ? std::sin(M_PI * this->get_time() / 8.0) : 1.0;
+      // Formula 3D: U(0,y,z) = 16 * Um * y * z * (H-y) * (H-z) / H^4
+      values[0] = 16.0 * u_m * p[1] * p[2] * (H - p[1]) * (H - p[2]) / std::pow(H, 4) * factor;
     }
 
     virtual double value(const Point<dim> &p, const unsigned int component = 0) const override {
       if (component == 0) {
         double factor = (test_case == 3) ? std::sin(M_PI * this->get_time() / 8.0) : 1.0;
-        return 4.0 * u_m * p[1] * (H - p[1]) / (H * H) * factor;
+        return 16.0 * u_m * p[1] * p[2] * (H - p[1]) * (H - p[2]) / std::pow(H, 4) * factor;
       }
       return 0.0;
     }
