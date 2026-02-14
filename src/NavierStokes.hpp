@@ -189,7 +189,7 @@ protected:
   double drag;
   double lift;
 
-  unsigned int preconditioner_type = 2;
+  unsigned int preconditioner_type = 0;
 
   // Discretization. ///////////////////////////////////////////////////////////
 

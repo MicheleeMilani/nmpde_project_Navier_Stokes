@@ -390,56 +390,33 @@ void NavierStokes::assemble(const double &time)
 }
 
 // Function used to assemble at time > deltat to avoid redundant computation of A,M,B
-// assemble rhs and convection matrix
+// Assembles rhs and convection matrix
 void NavierStokes::assemble_time_step(const double &time)
 {
   const unsigned int dofs_per_cell = fe->dofs_per_cell;
   const unsigned int n_q = quadrature->size();
-  const unsigned int n_q_boundary = quadrature_boundary->size();
   const double freq = 1.0 / deltat;
 
+  // Initialize FEValues to evaluate shape functions and their gradients at quadrature points
   FEValues<dim> fe_values(*fe,
                           *quadrature,
                           update_values | update_gradients |
                               update_quadrature_points | update_JxW_values);
-  FEFaceValues<dim> fe_boundary_values(*fe,
-                                       *quadrature_boundary,
-                                       update_values | update_quadrature_points |
-                                           update_normal_vectors |
-                                           update_JxW_values);
-
 
   FullMatrix<double> cell_convection_matrix(dofs_per_cell, dofs_per_cell);
-  FullMatrix<double> cell_mass_matrix(dofs_per_cell, dofs_per_cell);
   Vector<double> cell_rhs(dofs_per_cell);
 
   std::vector<types::global_dof_index> dof_indices(dofs_per_cell);
 
-  // We delete the previous Convection Matrix from the system matrix 
+  // Delete the previous Convection Matrix from the global system matrix 
   system_matrix.add(-1., convection_matrix);
   convection_matrix = 0.0;
   system_rhs = 0.0;
 
   FEValuesExtractors::Vector velocity(0);
-  FEValuesExtractors::Scalar pressure(dim);
-  std::vector<Tensor<1, dim>> boundary_velocity_values(n_q_boundary);
-  std::vector<Tensor<1, dim>> prev_boundary_velocity_values(n_q_boundary);
 
-  // Store the current velocity value in a tensor
+  // Store the current velocity values in a tensor
   std::vector<Tensor<1, dim>> current_velocity_values(n_q);
-  //Store the current velocity gradient value in a tensor
-  std::vector<Tensor<2,dim>> current_velocity_gradients(n_q);
-  // Store the current velocity divergence value in a tensor
-  std::vector<double> current_velocity_divergence(n_q);
-  // Store the previous velocity value in a tensor
-  std::vector<double> prev_velocity_diverg(n_q);
-  // Store the current velocity value in a tensor
-  std::vector<Tensor<1, dim>> prev_velocity_values(n_q);
-  //Store the prev velocity gradient value in a tensor
-  std::vector<Tensor<2,dim>> prev_velocity_gradients(n_q);
-  // Store the prev velocity divergence value in a tensor
-  std::vector<double> prev_velocity_divergence(n_q);
-  
 
   for (const auto &cell : dof_handler.active_cell_iterators())
   {
@@ -448,20 +425,11 @@ void NavierStokes::assemble_time_step(const double &time)
 
     fe_values.reinit(cell);
 
-    cell_mass_matrix = 0.0;
     cell_convection_matrix = 0.0;
     cell_rhs = 0.0;
 
-    // Retrieve the previous solution values.
-    fe_values[velocity].get_function_values(previous_solution, prev_velocity_values);
-    // Retrieve the previous solution gradient values
-    fe_values[velocity].get_function_divergences(previous_solution, prev_velocity_diverg);
-    // Retrieve the current solution values.
+    // Retrieve the current solution values for the velocity
     fe_values[velocity].get_function_values(solution, current_velocity_values);
-    //Retrieve the current solution gradient values
-    fe_values[velocity].get_function_gradients(solution, current_velocity_gradients);
-    // Retrieve the current solution divergence values
-    fe_values[velocity].get_function_divergences(solution, current_velocity_divergence);
 
     for (unsigned int q = 0; q < n_q; ++q)
     {
@@ -470,84 +438,61 @@ void NavierStokes::assemble_time_step(const double &time)
         for (unsigned int j = 0; j < dofs_per_cell; ++j)
         {
           // Convective term 
-          cell_convection_matrix(i, j) += scalar_product(fe_values[velocity].gradient(j, q) * current_velocity_values[q], fe_values[velocity].value(i, q)) * fe_values.JxW(q);
+          cell_convection_matrix(i, j) += scalar_product(fe_values[velocity].gradient(j, q) * current_velocity_values[q], 
+                                                         fe_values[velocity].value(i, q)) * fe_values.JxW(q);
         }
-        // Time derivative discretization on the right hand side BDF2
-        cell_rhs(i) +=  scalar_product(current_velocity_values[q], fe_values[velocity].value(i, q)) * fe_values.JxW(q) * freq;
+        // Time derivative discretization on the right-hand side (e.g., BDF2 / Euler)
+        cell_rhs(i) += scalar_product(current_velocity_values[q], 
+                                      fe_values[velocity].value(i, q)) * fe_values.JxW(q) * freq;
       }
     }
 
-    // BackFlow Stabilization on open boundary ( mainly for 3D instabilities in turbolent flows )
-    if (cell->at_boundary())
-    {
-      for (unsigned int f = 0; f < cell->n_faces(); ++f)
-      {
-        
-        if (cell->face(f)->at_boundary() &&
-            (false))
-        {
-          fe_boundary_values.reinit(cell, f);
-          fe_boundary_values[velocity].get_function_values(solution, boundary_velocity_values);
-          fe_boundary_values[velocity].get_function_values(previous_solution, prev_boundary_velocity_values);
-
-          for (unsigned int q = 0; q < n_q_boundary; ++q)
-          {
-            for (unsigned int i = 0; i < dofs_per_cell; ++i)
-            {
-              for (unsigned int j = 0; j < dofs_per_cell; ++j)
-              {
-                  cell_convection_matrix(i, j) -= 1.5 * std::min((2. * boundary_velocity_values[q] - prev_boundary_velocity_values[q] )* fe_boundary_values.normal_vector(q), 0.0) *
-                                                        scalar_product(fe_boundary_values[velocity].value(j, q),fe_boundary_values[velocity].value(i, q)) *
-                                                        fe_boundary_values.JxW(q);;
-              }
-            }
-          }
-        }
-      }
-    }
-
+    // Get the global DoF indices for the current cell
     cell->get_dof_indices(dof_indices);
+    
+    // Assemble local contributions into the global matrices and vectors
     convection_matrix.add(dof_indices, cell_convection_matrix);
     system_rhs.add(dof_indices, cell_rhs);
   }
+  
+  // Compress operations to ensure data is correctly exchanged among parallel MPI processes
   convection_matrix.compress(VectorOperation::add);
   system_rhs.compress(VectorOperation::add);
   pressure_mass.compress(VectorOperation::add);
+  
+  // Add the newly computed convection matrix to the global system matrix
   system_matrix.add(1., convection_matrix);
 
-
-  // Dirichlet boundary conditions.
-
-  // Apply Dirichlet boundary conditions.
+  // ---------------------------------------------------------
+  // Apply Dirichlet boundary conditions
+  // ---------------------------------------------------------
   {
     std::map<types::global_dof_index, double> boundary_values;
     std::map<types::boundary_id, const Function<dim> *> boundary_functions;
 
-    // We first impose the Dirichlet boundary conditions on the Inlet.
+    // First, impose the Dirichlet boundary conditions on the Inlet.
     inlet_velocity.set_time(time);
     boundary_functions[0] = &inlet_velocity;
     VectorTools::interpolate_boundary_values(dof_handler,
                                             boundary_functions,
                                             boundary_values,
-                                            ComponentMask(
-                                                {true, true, false}));
+                                            ComponentMask({true, true, false}));
 
-    // This ensure the two boundaries do not overlap.
+    // Clear the map to ensure the boundaries do not overlap or conflict.
     boundary_functions.clear();
     Functions::ZeroFunction<dim> zero_function(dim + 1);
     
-    // We then impose the Dirichlet boundary conditions on Walls and the Obstacle.
+    // Then, impose the Dirichlet boundary conditions on Walls and the Obstacle (no-slip condition).
     boundary_functions[2] = &zero_function;
     boundary_functions[3] = &zero_function;
     VectorTools::interpolate_boundary_values(dof_handler,
                                             boundary_functions,
                                             boundary_values,
-                                            ComponentMask(
-                                                {true, true, false}));
+                                            ComponentMask({true, true, false}));
 
+    // Apply the gathered boundary values to the linear system
     MatrixTools::apply_boundary_values(boundary_values, system_matrix, solution, system_rhs, false);
   }
-
 }
 
 // Function used to update time step and call the solver, compute the forces and output the results
