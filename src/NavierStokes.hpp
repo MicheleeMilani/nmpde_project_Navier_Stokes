@@ -103,7 +103,6 @@ public:
       u_m = u_m_val;
     }
 
-    // Questo risolve l'errore alla riga 849
     double getMeanVelocity() const {
       return 2.0 * u_m / 3.0;
     }
@@ -186,10 +185,9 @@ protected:
   // Final time.
   double T;
 
+  // Drag and lift.
   double drag;
   double lift;
-
-  unsigned int preconditioner_type = 0;
 
   // Discretization. ///////////////////////////////////////////////////////////
 
@@ -201,6 +199,9 @@ protected:
 
   // Polynomial degree used for pressure.
   unsigned int degree_pressure;
+
+  // Preconditioner type.
+  unsigned int preconditioner_type;
 
   // TIme step.
   double deltat;

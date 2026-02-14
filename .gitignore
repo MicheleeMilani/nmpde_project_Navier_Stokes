@@ -36,5 +36,10 @@ output/
 *.out
 *.app
 
+# Mesh files
+*.msh
+*.vtk
+*.vtu
+
 .DS_Store
 
