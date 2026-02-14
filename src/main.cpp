@@ -12,23 +12,6 @@ int main(int argc, char *argv[])
 
   std::string param_file = argc > 1 ? argv[1] : "../src/case_2.prm";
 
-  if (rank == 0)
-  {
-    const std::string output_dir = "../output"; 
-    try {
-      if (fs::exists(output_dir) && fs::is_directory(output_dir))
-      {
-        for (const auto& entry : fs::directory_iterator(output_dir))
-        {
-          fs::remove_all(entry.path());
-        }
-        std::cout << "Pulizia cartella '" << output_dir << "' completata." << std::endl;
-      }
-    } catch (const fs::filesystem_error& e) {
-      std::cerr << "Errore durante la pulizia della cartella: " << e.what() << std::endl;
-    }
-  }
-
   dealii::Timer timer;
   // Start the timer
   timer.restart();
@@ -45,28 +28,6 @@ int main(int argc, char *argv[])
   // Output the elapsed time
   if(rank == 0)
     std::cout << "Time taken to solve Navier Stokes problem: " << timer.wall_time() << " seconds" << std::endl;
-
-  // if (rank == 0)
-  // {
-  //   const std::string output_filename = "forces_results.csv";
-  //   std::ofstream outputFile(output_filename);
-
-  //   if (!outputFile.is_open())
-  //   {
-  //     std::cerr << "Error opening output file" << std::endl;
-  //     return -1;
-  //   }
-  //   outputFile << "Iteration, Drag, Lift, Coeff Drag, CoeffLift, time prec, time solve" << std::endl;
-
-  //   for (size_t ite = 0; ite < problem.vec_drag.size(); ite++)
-  //   {
-  //     outputFile << ite * deltat << ", " << problem.vec_drag[ite] << ", " << problem.vec_lift_coeff[ite] << ", " 
-  //               << problem.vec_drag_coeff[ite] << ", " << problem.vec_lift_coeff[ite] << ", "
-  //               << problem.time_prec[ite] << ", " << problem.time_solve[ite]
-  //               << std::endl;
-  //   }
-  //   outputFile.close();
-  // }
 
   return 0;
 }
