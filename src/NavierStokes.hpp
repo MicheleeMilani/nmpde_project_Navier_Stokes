@@ -152,10 +152,7 @@ protected:
   //Compute drag and lift
   std::vector<double> compute_lift_drag();
 
-  void compute_pressure_difference();
-
-  // MPI parallel. /////////////////////////////////////////////////////////////
-  
+  // MPI parallel. /////////////////////////////////////////////////////////////  
   // Number of MPI processes.
   const unsigned int mpi_size;
 
