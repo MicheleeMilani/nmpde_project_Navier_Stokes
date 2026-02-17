@@ -180,7 +180,6 @@ using namespace dealii;
     TrilinosWrappers::PreconditionILU preconditioner_S;
   };
 
-// approximate Simple Correct
   // Yosida preconditioner -- the inverse of Mu is replaced by the inverse of it's diagonal's elements
   class PreconditionYosida 
   {
