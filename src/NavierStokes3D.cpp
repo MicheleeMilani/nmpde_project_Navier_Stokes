@@ -620,20 +620,6 @@ void NavierStokes::solve_time_step()
             throw std::runtime_error("Invalid preconditioner type");
     }
   }
-    // Write coefficients to "coeff.csv"
-    // if (mpi_rank == 0) // Ensure only the root process writes to the file
-    // {
-    //     std::ofstream coeff_file("../output/gmres.csv", std::ios::app); // Open in append mode
-    //     if (coeff_file.is_open())
-    //     {
-    //         coeff_file << time << ',' << Re << ',' << solver_control.last_step() << "\n";
-    //         coeff_file.close();
-    //     }
-    //     else
-    //     {
-    //         pcout << "Error: Unable to open coeff.csv for writing." << std::endl;
-    //     }
-    // }
   solution = solution_owned;
 
 }
@@ -671,126 +657,7 @@ void NavierStokes::output(const unsigned int &time_step) const
                                         MPI_COMM_WORLD,
                                         numbers::invalid_unsigned_int,
                                         1);
-
-    // Write coefficients to "coeff.csv"
-    // if (mpi_rank == 0) // Ensure only the root process writes to the file
-    // {
-    //     std::ofstream coeff_file("../output/coeff_2.csv", std::ios::app); // Open in append mode
-    //     if (coeff_file.is_open())
-    //     {
-    //         coeff_file << time_step << "," << coeff[0] << "," << coeff[1] << "\n";
-    //         coeff_file.close();
-    //     }
-    //     else
-    //     {
-    //         pcout << "Error: Unable to open coeff.csv for writing." << std::endl;
-    //     }
-    // }
 }
-
-// std::vector<double> NavierStokes::compute_lift_drag()
-// {
-
-//    // Define quadrature for faces
-//    QGaussSimplex<dim - 1> face_quadrature_formula(3);
-//    const unsigned int n_q_points = face_quadrature_formula.size();
-
-//    // Define FE extractors for velocity and pressure
-//    FEValuesExtractors::Vector velocities(0);
-//    FEValuesExtractors::Scalar pressure(dim);
-
-//    // Containers to store evaluated values
-//    std::vector<double>         pressure_values(n_q_points);
-//    std::vector<Tensor<2, dim>> velocity_gradients(n_q_points);
-
-//    // Initialize FE face values
-//    FEFaceValues<dim> fe_face_values(*this->fe,
-//                                     face_quadrature_formula,
-//                                     update_values | update_quadrature_points |
-//                                     update_gradients | update_JxW_values |
-//                                     update_normal_vectors);
-
-//    // Initialize tensors for calculations
-//    Tensor<1, dim> normal_vector;
-//    Tensor<2, dim> fluid_stress;
-//    Tensor<2, dim> fluid_pressure;
-//    Tensor<1, dim> forces;
-
-//    // Initialize drag and lift accumulators
-//    double local_drag = 0.0;
-//    double local_lift = 0.0;
-
-//    // Iterate over all cells
-//    for (const auto &cell : this->dof_handler.active_cell_iterators())
-//    {
-//        if (!cell->is_locally_owned())
-//            continue;
-           
-//        if (!cell->at_boundary())
-//            continue;
-
-//        for (unsigned int f = 0; f < cell->n_faces(); ++f)
-//        {
-//            if (!cell->face(f)->at_boundary())
-//                continue;
-
-//            unsigned int boundary_id = cell->face(f)->boundary_id();
-//            bool is_stress_boundary = false;
-
-//            // Determine if current face is where stress should be evaluated           
-//            if (boundary_id == 3) // Obstacle 
-//                is_stress_boundary = true;
-
-//            if (!is_stress_boundary)
-//                continue;
-
-//            // Reinitialize FE face values for the current face
-//            fe_face_values.reinit(cell, f);
-
-//            // Retrieve velocity gradients and pressure values on the face
-//            fe_face_values[velocities].get_function_gradients(this->solution, velocity_gradients);
-//            fe_face_values[pressure].get_function_values(this->solution, pressure_values);
-
-//            // Iterate over quadrature points on the face
-//            for (unsigned int q = 0; q < n_q_points; ++q)
-//            {
-//                // Get the normal vector
-//                normal_vector = -fe_face_values.normal_vector(q);
-
-//                // Compute fluid pressure tensor (p * I)
-//                fluid_pressure = 0;
-//                for (unsigned int d = 0; d < dim; ++d)
-//                    fluid_pressure[d][d] = pressure_values[q];
-
-//                // Compute fluid stress tensor (nu * grad(U) - pI)
-//                fluid_stress = this->nu * (velocity_gradients[q] + transpose(velocity_gradients[q])) - fluid_pressure;
-//                // Compute forces: stress tensor contracted with normal vector and scaled by JxW
-//                forces = fluid_stress * normal_vector * fe_face_values.JxW(q);
-
-//                // Accumulate drag and lift using the scaling factor
-//                local_drag += forces[0];
-//                local_lift += forces[1];
-//            }
-//        }
-//    }
-
-  
-//    // Reduce lift and drag across all processes to rank 0
-//    double total_lift = 0.0;
-//    double total_drag = 0.0;
-
-//    MPI_Reduce(&local_lift, &total_lift, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-//    MPI_Reduce(&local_drag, &total_drag, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-//   const double mean_v = inlet_velocity.getMeanVelocity();
-// 	const double D= 0.1;
-
-// 	const double c_d=(2.*total_drag)/(mean_v*mean_v*D);
-// 	const double c_l=(2.*total_lift)/(mean_v*mean_v*D);
-//   std::vector<double> coefficients = { c_d , c_l };
-
-//   return coefficients;
-// }
-
 
 // Function used to compute the forces acting on the body
 std::vector<double> NavierStokes::compute_lift_drag()
@@ -950,20 +817,6 @@ void NavierStokes::compute_pressure_difference()
         // Compute pressure difference
         double p_diff = global_pres_point1 - global_pres_point2;
         pcout << "Pressure difference (P(A) - P(B)) = " << p_diff << std::endl;
-
-        /*// Write final aggregated results to CSV
-        std::string output_path = this->get_output_directory() + "/lift_drag_output.csv";
-        std::ofstream output_file(output_path, std::ios::app);
-        if (output_file.is_open())
-        {
-            output_file << total_drag << ", " << total_lift << ", " << p_diff << "\n";
-            output_file.close();
-            std::cout << "Wrote aggregated drag/lift data to lift_drag_output.csv" << std::endl;
-        }
-        else
-        {
-            std::cerr << "Error: Unable to open lift_drag_output.csv for writing." << std::endl;
-        }*/
     }
     // Ensure all processes have completed the reductions
     MPI_Barrier(MPI_COMM_WORLD);
