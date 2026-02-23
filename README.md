@@ -6,7 +6,7 @@ Binary files must not be uploaded to the repository (including executables).
 Mesh files should not be uploaded to the repository. If applicable, upload `gmsh` scripts with suitable instructions to generate the meshes (and ideally a Makefile that runs those instructions). If not applicable, consider uploading the meshes to a different file sharing service, and providing a download link as part of the building and running instructions.
 
 
-### 1. Mesh Generation
+### Mesh Generation
 Before compiling the solver, you must generate the required mesh files. A `Makefile` is provided in the root directory to automate this process using Gmsh.
 
 * **To generate a specific mesh** (e.g., the 3D Cylinder):
