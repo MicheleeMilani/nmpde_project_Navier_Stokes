@@ -131,3 +131,5 @@ Physical Surface(3) = {7, 8, 9, 10}; // Obstacle
 Physical Volume(4) = {1};            // Fluid domain
 
 
+Mesh.Algorithm3D = 1; // 1: Delaunay
+Mesh 3;
