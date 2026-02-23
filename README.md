@@ -22,7 +22,6 @@ Before compiling the solver, you must generate the required mesh files. A `Makef
     $ make clean-mesh
     ```
 
----
 
 
 ### Compiling
